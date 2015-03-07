@@ -1,25 +1,38 @@
-import win32api, win32con, win32gui, urllib.request, datetime, time, os, shutil
+import urllib.request, datetime, time, os, shutil, os, platform, subprocess
 
-#----------------------------------------------------------------------
-def getImageName():
-    return 'Yandex-Images-' + datetime.date.today().strftime('%Y-%m-%d') + '.jpg'
+IMAGENAME = 'Yandex-Images-' + datetime.date.today().strftime('%Y-%m-%d') + '.jpg'
+YANDEX_URL = 'http://yandex.ru/images/today?size=1920x1200'
+MAC_SCRIPT = """/usr/bin/osascript<<END
+tell application "Finder"
+set desktop picture to {"%s"} as alias
+end tell
+END"""
 
-def setImageAsWallpaper(filename):
-    key = win32api.RegOpenKeyEx(win32con.HKEY_CURRENT_USER,"Control Panel\\Desktop",0,win32con.KEY_SET_VALUE)
-    win32api.RegSetValueEx(key, "WallpaperStyle", 0, win32con.REG_SZ, "0")
-    win32api.RegSetValueEx(key, "TileWallpaper", 0, win32con.REG_SZ, "0")
-    win32gui.SystemParametersInfo(win32con.SPI_SETDESKWALLPAPER, "C:/Yandex-Images/" + filename, 1+2)
+def convert_to_bmp(path_to_image):
+    from PIL import Image
+    bmp_image = Image.open(path_to_image)
+    filename = os.path.basename(path_to_image)
+    filename = os.path.splitext(filename)[0] + ".BMP"
+    bmp_image.save(filename, "BMP")
+    return os.path.join(os.getcwd(), filename).encode('utf-8')
 
-def getImageAndSaveAs(filename):
-    urllib.request.urlretrieve('http://yandex.ru/images/today?size=1920x1200',filename)
+def setImageAsWallpaper(path_to_image):
+    system = platform.system()
+    if system == 'Darwin':
+        subprocess.Popen(MAC_SCRIPT %
+                         convert_to_hfs(path_to_image), shell=True)
+        time.sleep(10)  # launchd requires that the job runs for at least 10s
 
-def moveImage(filename):
-    shutil.move(filename, "C:/Yandex-Images/" + filename)
+    elif system == 'Windows':
+        from ctypes import windll
+        bmp = convert_to_bmp(path_to_image)
+        windll.user32.SystemParametersInfoA(20, 0, bmp, 0)
+        os.remove(path_to_image)
+        os.remove(bmp)
 
-def getImagePath():
-    return os.getcwd()
+
 
 if __name__ == "__main__":
-    getImageAndSaveAs(getImageName())
-    moveImage(getImageName())
-    setImageAsWallpaper(getImageName())
+    urllib.request.urlretrieve(YANDEX_URL,IMAGENAME)
+    print(os.path.realpath(IMAGENAME))
+    setImageAsWallpaper(os.path.realpath(IMAGENAME))
